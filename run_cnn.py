@@ -3,6 +3,7 @@
 Created on Mon Feb 21 14:01:14 2022
 
 @author: calum
+this file contains code from [1]
 """
 
 #### the code for CNN model####  
