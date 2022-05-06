@@ -94,6 +94,27 @@ def pre_fake():
     
     return data_raw
 
+def import_inverted(x_start, x_split, rf): # x_split datasets, starting at x_start
+    x_start = x_start+1600
+    
+    data_raw = pd.read_csv(
+        r"C:\Users\calum\OneDrive\Documents\Year_3_Project\Python\spectrogram\dataset\raw\\" +str(rf)+ "\data_"+str(x_start)+"_accel_watch.txt"
+        ,names=names, lineterminator=';', skip_blank_lines=True)
+    #np.savetxt('C:/Users/calum/OneDrive/Documents/Year_3_Project/Python/oldGAN/sumx.txt',data_raw,delimiter=',',fmt = '%s')
+    data_raw['labels']=str(x_start)
+    #data_raw = data_raw[]
+    
+    for i in range(x_start+1,x_start+x_split): #or 1651
+        #print(i)
+        filename=src+'/dataset/raw/'+str(rf)+'/data_'+str(i)+'_accel_watch.txt'
+        x=pd.read_csv(filename,names=names, lineterminator=';')
+        x['labels']=str(i)
+        data_raw=pd.concat([data_raw, x], axis=0)
+    
+    #print(data_raw)
+    return data_raw
+
+
 def pre_proc_real(data_raw):
     data_full=data_raw
     data_full=data_full.loc[((data_full['activities'] == 'A') | (data_full['activities'] == 'B')
@@ -158,37 +179,27 @@ def pre_proc_real(data_raw):
 
 def pre_proc(data_raw, scaler):
     data_full=data_raw
-    #data_raw=data_raw.loc[data_raw['activities']==activity]     #selected activity data
-
+    
     data_full=data_full.loc[((data_full['activities'] == 'A') | (data_full['activities'] == 'B')
           | (data_full['activities'] == 'D') | (data_full['activities'] == 'Q'))]
-    #print(data_full)
+ 
+    #"clean data" - ensure all activities same size to prevent overlap when mini samples taken
+    l_1 = int(data_full['labels'].values[1])
+    
     data_clean = pd.DataFrame(columns=names)
+    #test 10
     for i in range(10):
-        d_sel=data_full.loc[((data_full['labels'] == str(1640+i)))]
+        d_sel=data_full.loc[((data_full['labels'] == str(l_1+i)))]
         dataA=d_sel.loc[((d_sel['activities'] == 'A'))].head(18*200)
         dataB=d_sel.loc[((d_sel['activities'] == 'B'))].head(18*200)
         dataD=d_sel.loc[((d_sel['activities'] == 'D'))].head(18*200)
         dataQ=d_sel.loc[((d_sel['activities'] == 'Q'))].head(18*200)
         d_sel=pd.concat([dataA, dataB, dataD, dataQ], axis=0)
-        #print(d_sel)
-        #print("______________________")
+        #print(d_sel.shape)
         data_clean=pd.concat([data_clean, d_sel], axis=0)
-        
-    
-    """
-    dataA=d_sel.loc[((d_sel['activities'] == 'A'))]#.head(180*200)
-    dataB=d_sel.loc[((d_sel['activities'] == 'B'))]#.head(180*200)
-    dataD=d_sel.loc[((d_sel['activities'] == 'D'))]#.head(180*200)
-    dataQ=d_sel.loc[((d_sel['activities'] == 'Q'))]#.head(180*200)
-    
-    print(dataA.shape, dataB.shape, dataD.shape, dataQ.shape)
-    
-    data_full=pd.concat([dataA, dataB, dataD, dataQ], axis=0)
-    """
-    
- 
-    #print(data_full)
+
+    #data_clean=data_full
+
     data_clean.drop(['labels', 'time series'],axis=1,inplace=True) 
     #only use 3-axis data
     #features_considered = ['x', 'y', 'z']
@@ -200,7 +211,6 @@ def pre_proc(data_raw, scaler):
     data=pd.DataFrame(s_total) 
     
     """ one hot encoding to replace labels.
-    also splits activities into 4 types
     """
     
     ## data type transformation 
@@ -211,7 +221,8 @@ def pre_proc(data_raw, scaler):
 
     label=pd.DataFrame(label,dtype=int) 
     ## MinMaxScaler normalization 
-    data=scaler.transform(data)  
+    data=scaler.transform(data) 
+    #data=np.array(data)
     data=pd.DataFrame(data, columns=['x','y','z']) 
     ## Concat label and data 
     label=label.reset_index(drop=True) 
@@ -219,36 +230,15 @@ def pre_proc(data_raw, scaler):
     dataset=pd.concat([label,data],axis=1) 
     dataset=np.array(dataset)
 
-    # ###if L2 normalization,uncomment the code before END
-    # dataset = tf.keras.utils.normalize(dataset, axis=0,order=2)#L2
-    # ###END
     step=200
 
     x_train_single = multivariate_data(dataset, step)
-    
-    #code for saving plot of data for visual inspections
-    #show_plot(x_train_single[1], 'Single Data')
-    #np.savetxt("dataset.txt", dataset)
-    #print(dataset.shape)
-    #print(x_train_single.shape)
-    act=36000
-    #print(dataset.shape)
-    #reshape to persons
+
     dataset=dataset.reshape((10,-1,4))
-    #show_plot(dataset[5,:,1:], 'Raw_Data')
-    #show_plot(dataset[0,:,1:], 'Raw_Data')
-    #print(dataset.shape)
-    
-    #datasets is a tf dataset with a single element of shape (batch_size, step, 3)
-    #datasets = tf.data.Dataset.from_tensor_slices(x_train_single)
-    #randomly shuffles elements of this dataset
-    #datasets = datasets.shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
-    #print(x_train_single)
+
     data_n=x_train_single[:,:,1:]  
     label_n=x_train_single[:,0,0] 
-    #print(collections.Counter(label_n))
-    #print(label_n)
-    #label_n=tf.keras.utils.to_categorical(label_n) 
+
         
     return dataset
 
@@ -260,11 +250,11 @@ def one_plot(plot_data, title, i):
     plt.title(title)
     if (plot_data.ndim>1):
         plt.plot(time_steps, plot_data[a_len*i:a_len*(i+1), 0].flatten(), color='red', label='Accel-X')
-        plt.plot(time_steps, plot_data[a_len*i:a_len*(i+1), 1].flatten(), color='blue', label='Accel-Y')
-        plt.plot(time_steps, plot_data[a_len*i:a_len*(i+1), 2].flatten(), color='yellow', label='Accel-Z')
+        plt.plot(time_steps, plot_data[a_len*i:a_len*(i+1), 1].flatten(), color='green', label='Accel-Y')
+        plt.plot(time_steps, plot_data[a_len*i:a_len*(i+1), 2].flatten(), color='blue', label='Accel-Z')
     else:
         plt.plot(time_steps, plot_data.flatten(), color='red', label='Accel-X')
-    plt.ylim((-1, 1))
+    plt.ylim((0, 0.5))
     plt.legend()
     plt.xlabel('Time (seconds)')
     plt.ylabel('Acceleration ($m/s^2$)')
@@ -274,8 +264,8 @@ def one_plot(plot_data, title, i):
 
 def show_plot(plot_data, title):
     a_len = int(plot_data.shape[0]/4)
-    #time_steps = create_time_steps(a_len)
-    time_steps = create_time_steps(a_len/18)
+    time_steps = create_time_steps(a_len)
+    #time_steps = create_time_steps(a_len/18)
     fig, act = plt.subplots(4, sharex=True, sharey=True, figsize=(4, 8), dpi=100)
     fig.suptitle(title)
     fig.tight_layout()
@@ -284,10 +274,13 @@ def show_plot(plot_data, title):
     for i in range(4):
         act[i].set_title(activity[i])
         if (plot_data.ndim>1):
-            #act[i].plot(time_steps, plot_data[a_len*i:a_len*(i+1), 0].flatten(), color='red', label='Accel-X')
-            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 0].flatten(), color='red', label='Accel-X')
-            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 1].flatten(), color='blue', label='Accel-Y')
-            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 2].flatten(), color='yellow', label='Accel-Z')
+            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i+1), 0].flatten(), color='red', label='Accel-X')
+            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i+1), 1].flatten(), color='green', label='Accel-Y')
+            act[i].plot(time_steps, plot_data[a_len*i:a_len*(i+1), 2].flatten(), color='blue', label='Accel-Z')
+            
+            #act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 0].flatten(), color='red', label='Accel-X')
+            #act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 1].flatten(), color='green', label='Accel-Y')
+            #act[i].plot(time_steps, plot_data[a_len*i:a_len*(i)+200, 2].flatten(), color='blue', label='Accel-Z')
             act[i].set_ylabel('Acceleration ($m/s^2$)')
             act[i].set_ylim(-0.5, 1)
         else:
@@ -318,9 +311,9 @@ def hist_plot(plot_data, title):
         for i in range(4):
             act[0,i].set_title(activity[i])
             if (plot_data.ndim>1):
-                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 0].flatten(), color='red', label='Accel-X', histtype='step', lw=1, bins=100,)
-                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 1].flatten(), color='blue', label='Accel-Y',histtype='step', lw=1, bins=100,)
-                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 2].flatten(), color='yellow', label='Accel-Z',histtype='step', lw=1, bins=100,)
+                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 0].flatten(), color='red', label='Accel-X', lw=1, bins=100,)
+                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 1].flatten(), color='green', label='Accel-Y', lw=1, bins=100,)
+                act[j,i].hist(p_data[a_len*i:a_len*(i+1), 2].flatten(), color='blue', label='Accel-Z', lw=1, bins=100,)
                 #act[i,j].set_xlabel('Acceleration ($m/s^2$)')
                 act[j,i].set_ylim(0, 300)
                 act[j,i].set_xlim(-0.5, 1)
@@ -340,30 +333,31 @@ def plot_raw(real, spec, time):
     print(select)
     select=7
     
-    #show_plot(real[select,:,1:], str(1640+select)+'_Raw_Data_real')
-    #show_plot(spec[select,:,1:], str(1640+select)+'_Raw_Data_specFake')
-    #show_plot(time[select,:,1:], str(1660+select)+'_Raw_Data_timeFake')
+    show_plot(real[select,:,1:], str(1640+select)+'_Raw_Data_real')
+    show_plot(spec[select,:,1:], str(1640+select)+'_Raw_Data_specFake')
+    show_plot(time[select,:,1:], str(1660+select)+'_Raw_Data_timeFake')
     select=0
     #for select in range(10):
-    hist_plot(real[:,:,1:], '_Hist_Data_real')
-    hist_plot(spec[:,:,1:], 'Hist_Data_specFake')
-    hist_plot(time[:,:,1:], str(1660+select)+'_Hist_Data_timeFake')
+    #hist_plot(real[:,:,1:], '_Hist_Data_real')
+    #hist_plot(spec[:,:,1:], 'Hist_Data_specFake')
+    #hist_plot(time[:,:,1:], str(1660+select)+'_Hist_Data_timeFake')
     
     return
 
 
 mm_scaler = pre_proc_real(import_real(0, 51))
-real = pre_proc(import_real(40, 10), mm_scaler)
+real = pre_proc(import_real(0, 10), mm_scaler)
+real_inv = pre_proc(import_inverted(40, 10, "real_inv"), mm_scaler)
 spec = pre_proc(import_raw(40,10,'fake'), mm_scaler)
 timef = pre_proc(pre_fake(), mm_scaler)
 
 
 plot_raw(real,spec,timef)
 
-#one_plot(spec[2,:,1:], "A_Raw_Data_fake", 0)
-#one_plot(real[0,:,1:], "B_Raw_Data", 1)
-#one_plot(real[0,:,1:], "D_Raw_Data", 2)
-#one_plot(real[0,:,1:], "Q_Raw_Data", 3)
+#one_plot(real[2,:,1:], "A_Raw_Data", 0)
+#one_plot(real_inv[2,:,1:], "B_Raw_Data", 1)
+#one_plot(real_inv[2,:,1:], "D_Raw_Data", 2)
+#one_plot(real_inv[2,:,1:], "Q_Raw_Data", 3)
 
 
 
